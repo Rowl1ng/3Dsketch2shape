@@ -6,7 +6,7 @@ import random
 import importlib
 import os
 from models.network import AutoEncoder
-from data.data import ImNetSamples
+from data.datasets import ImNetSamples
 from utils.debugger import MyDebugger
 from torch.multiprocessing import Pool, Process, set_start_method
 
@@ -48,8 +48,9 @@ if __name__ == '__main__':
 
 
     ## folder for testing
-    testing_folder = r'./pretrain/phase_2_model'
-    config_path = os.path.join(testing_folder, 'config.py')
+    testing_folder = r'/vol/vssp/datasets/multiview/SDF_ShapeNet/NT-Net/phase_2_model'
+    # config_path = os.path.join(testing_folder, 'config.py')
+    config_path = os.path.join(testing_folder, 'config_debug.py')
 
     ## import config here
     spec = importlib.util.spec_from_file_location('*', config_path)
@@ -58,7 +59,7 @@ if __name__ == '__main__':
 
     ## dataload
     ### create dataset
-    data_path = r'./data/all_vox256_img/all_vox256_img_test.hdf5'
+    data_path = r'/vol/vssp/datasets/multiview/SDF_ShapeNet/BP-Net/data/all_vox256_img/all_vox256_img_test.hdf5'
     testing_flag = True
     if os.path.exists(config.data_path) and not testing_flag:
         data_path = config.data_path
@@ -80,7 +81,7 @@ if __name__ == '__main__':
 
     sample_interval = 1
     resolution = 64
-    max_batch = 100000
+    max_batch = 1000 #100000 # limitied by GPU memory
     save_deformed = True
     thershold = 0.01
     with_surface_point = True

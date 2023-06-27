@@ -7,7 +7,9 @@ import torch.nn.functional as F
 from models.encoder.dgcnn import DGCNN
 from models.encoder.cnn_3d import CNN3D, CNN3DDouble
 from models.encoder.image import ImageEncoder
+from models.encoder.sketch import SketchEncoder
 from models.decoder.flow import FlowDecoder
+from models.decoder.sdf import SDFDecoder
 from models.decoder.bsp import BSPDecoder
 from utils.ply_utils import triangulate_mesh_with_subdivide
 from typing import Union
@@ -18,6 +20,17 @@ from utils.other_utils import get_mesh_watertight, write_ply_polygon
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
+class SketchAutoEncoder(nn.Module):
+    ## init
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.sketch_encoder = SketchEncoder(config = self.config)
+        self.auto_encoder = None
+
+
+    def set_autoencoder(self, network):
+        self.auto_encoder = network
 
 class ImageAutoEncoder(nn.Module):
     ## init
@@ -30,52 +43,6 @@ class ImageAutoEncoder(nn.Module):
 
     def set_autoencoder(self, network):
         self.auto_encoder = network
-
-class ImageAutoEncoderEndToEnd(nn.Module):
-    ## init
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.image_encoder = ImageEncoder(config = self.config)
-
-        network_state_dict = torch.load(self.config.auto_encoder_resume_path)
-        network_state_dict = ImageAutoEncoderEndToEnd.process_state_dict(network_state_dict, type = 1)
-        self.auto_encoder = AutoEncoder(config)
-        self.auto_encoder.load_state_dict(network_state_dict)
-        self.auto_encoder.train()
-
-        print(f"Reloaded the Auto encoder from {self.config.auto_encoder_resume_path}")
-
-    def forward(self, images = None, coordinates_inputs = None):
-
-        if coordinates_inputs is None:
-            return self.image_encoder(images)
-        else:
-            embedding = self.image_encoder(images)
-
-            outputs = self.auto_encoder.decoder(embedding, coordinates_inputs)
-
-            return outputs
-
-
-    @staticmethod
-    def process_state_dict(network_state_dict, type = 0):
-
-        if torch.cuda.device_count() >= 2 and type == 0:
-            for key, item in list(network_state_dict.items()):
-                if key[:7] != 'module.':
-                    new_key = 'module.' + key
-                    network_state_dict[new_key] = item
-                    del network_state_dict[key]
-        else:
-            for key, item in list(network_state_dict.items()):
-                if key[:7] == 'module.':
-                    new_key = key[7:]
-                    network_state_dict[new_key] = item
-                    del network_state_dict[key]
-
-        return network_state_dict
-
 
 
 
@@ -94,11 +61,15 @@ class AutoEncoder(nn.Module):
 
         elif config.encoder_type == 'Image':
             self.encoder = ImageEncoder(config=config)
+        elif config.encoder_type == 'PN++':
+            self.encoder = SketchEncoder(config=config)
         else:
             raise Exception("Encoder type not found!")
 
         if config.decoder_type == 'Flow':
             self.decoder = FlowDecoder(config=config)
+        elif config.decoder_type == 'SDF':
+            self.decoder = SDFDecoder(config=config)
         else:
             raise Exception("Decoder type not found!")
 
@@ -179,7 +150,7 @@ class AutoEncoder(nn.Module):
 
         if save_output:
             write_ply_polygon(file_path[:-4] + '_deformed.ply', vertices_result, polygons)
-            write_ply_polygon(file_path[:-4] + '_orginal.ply', vertices, polygons)
+            write_ply_polygon(file_path[:-4] + '_original.ply', vertices, polygons)
 
 
         return vertices, polygons, vertices_result, polygons, vertices_convex, bsp_convex_list
@@ -259,8 +230,230 @@ class AutoEncoder(nn.Module):
         vertices_result = np.concatenate(vertices_result, axis=0)
         return vertices_result
 
+class SubspaceLayer(nn.Module):
+    def __init__(self, dim, n_basis):
+        super(SubspaceLayer, self).__init__()
+
+        self.U = nn.Parameter(torch.empty(n_basis, dim))    # (6,96)
+        nn.init.orthogonal_(self.U)
+        self.L = nn.Parameter(torch.FloatTensor([3 * i for i in range(n_basis, 0, -1)]))    # (6)
+        self.mu = nn.Parameter(torch.zeros(dim))    # (96)
+
+    def forward(self, z):
+        return (self.L * z) @ self.U + self.mu
+
+class EigenBlock_s(nn.Module):
+    def __init__(
+        self,
+        in_dim,
+        in_channels,
+        n_basis
+    ):
+        super().__init__()
+
+        self.convFeat1 = nn.Linear(in_dim, 128, 1)
+        self.convFeat2 = nn.Linear(128, n_basis, 1)
+        self.projection = SubspaceLayer(dim=in_channels, n_basis=n_basis)
+        # self.subspace_conv1 = nn.Conv1d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.gamma = nn.Parameter(torch.zeros(1))
+
+    def forward(self, z):
+        z = self.convFeat1(z)
+        z = self.convFeat2(z)
+        h = self.projection(z)#.view(h.shape)
+        # h = h + z * self.gamma
+        h = torch.sigmoid(h)
+
+        return z, h
+
+class EigenBlock_t(nn.Module):
+    def __init__(
+        self,
+        in_dim,
+        in_channels,
+        n_basis
+    ):
+        super().__init__()
+
+        self.convFeat1 = nn.Linear(in_dim, 128, 1)
+        self.convFeat2 = nn.Linear(128, n_basis, 1)
+        self.projection = SubspaceLayer(dim=in_channels, n_basis=n_basis)
+        # self.subspace_conv1 = nn.Conv1d(in_channels, in_channels, kernel_size=1, stride=1)
+        self.gamma = nn.Parameter(torch.zeros(1))
+
+    def forward(self, feat):
+        z = self.convFeat1(feat)
+        z = self.convFeat2(z)
+        h = self.projection(z)#.view(h.shape)
+        # h = h + z * self.gamma
+        h = feat + torch.sigmoid(h)
+
+        return z, h
+
+class SDFAutoEncoder(AutoEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        self.config = config
+        from models.encoder.pointnet2_cls_msg import get_model
+        self.encoder = get_model()
+        self.decoder = SDFDecoder(config=config)
+
+    def forward(self, pc_data, xyz):
+        lat_vecs = self.encoder(pc_data)
+        # lat_vecs_batch = lat_vecs.repeat(self.config.SamplesPerScene, 1)
+        lat_vecs_batch = torch.repeat_interleave(lat_vecs, self.config.SamplesPerScene, dim = 0)
+        input = torch.cat([lat_vecs_batch, xyz], dim=1)
+        pred_sdf = self.decoder(input)
+        return pred_sdf, lat_vecs
+    
+class ShapeSketchAutoEncoder(AutoEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        self.config = config
+        self.encoder = SketchEncoder(config=config)
+
+        if config.decoder_type == 'Flow':
+            self.decoder = FlowDecoder(config=config)
+        elif config.decoder_type == 'SDF':
+            self.decoder = SDFDecoder(config=config)
+        else:
+            raise Exception("Decoder type not found!")
+        
+        if hasattr(config, 'handle_network') :
+            if config.handle_network == 'Eigen':
+                # self.convFeat = nn.Linear(2 * self.config.decoder_input_embbeding_size, 128, 1)
+                if self.config.eigen_s:
+                    self.eigen_net_s = EigenBlock_s(in_dim=2 * self.config.decoder_input_embbeding_size, in_channels=self.config.decoder_input_embbeding_size, n_basis=config.basis_s)
+                if self.config.eigen_t:
+                    self.eigen_net_t = EigenBlock_t(in_dim=self.config.decoder_input_embbeding_size, in_channels=self.config.decoder_input_embbeding_size, n_basis=config.basis_t)
+            elif config.handle_network == 'VAE':
+                from models.encoder.vae import VAE
+                self.vae_net = VAE(in_dim=self.config.decoder_input_embbeding_size, latent_dim=self.config.decoder_input_embbeding_size)
+            elif config.handle_network == 'flow':
+                from models.encoder.flow import get_flow
+                self.flow = get_flow(style_dim=self.config.decoder_input_embbeding_size, width=512, depth=4, condition_size=self.config.decoder_input_embbeding_size)
 
 
+        self.encode_func = self.config.encode_func if hasattr(self.config, 'encode_func') else 'encode'
+
+    def encode(self, sketch_points, shape_points, is_training):
+        #extract handle for z_s and z_t and use ahndle as embedding
+        inputs = torch.cat([sketch_points, shape_points])
+        embedding = self.encoder(inputs, is_training=is_training)
+        if self.config.handle_network == 'Eigen':
+            # z_s = embedding[:, :self.config.decoder_input_embbeding_size]
+            # z_s_new = self.eigen_net(z_s.clone())
+            # embedding[:, :self.config.decoder_input_embbeding_size] = z_s_new
+            z_s = self.eigen_net_s(embedding)
+            z_t = self.eigen_net_t(embedding)
+            new_emb = torch.cat([z_s, z_t], dim=1) 
+            return new_emb
+        return embedding
+
+    def encode_v2(self, sketch_points, shape_points, is_training):
+        # only do eigenblock to z_s
+        inputs = torch.cat([sketch_points, shape_points])
+        embedding = self.encoder(inputs, is_training=is_training)
+        if self.config.handle_network == 'Eigen':
+            # z_s = embedding[:, :self.config.decoder_input_embbeding_size].clone()
+            z_t = embedding[:, self.config.decoder_input_embbeding_size:].clone()
+            # z_t = self.convFeat(embedding)
+            # embedding[:, :self.config.decoder_input_embbeding_size] = z_s_new
+            handle, z_s = self.eigen_net_s(embedding)
+            new_emb = torch.cat([z_s, z_t], dim=1)
+            return handle, new_emb
+        return None, embedding
+
+    def encode_v3(self, sketch_points, shape_points, is_training):
+        # only do eigenblock to z_t
+        inputs = torch.cat([sketch_points, shape_points])
+        embedding = self.encoder(inputs, is_training=is_training)
+        if self.config.handle_network == 'Eigen':
+            z_s = embedding[:, :self.config.decoder_input_embbeding_size].clone()
+            z_t = embedding[:, self.config.decoder_input_embbeding_size:].clone()
+            # z_t = self.convFeat(embedding)
+            # embedding[:, :self.config.decoder_input_embbeding_size] = z_s_new
+            handle, z_t = self.eigen_net_t(z_t)
+            new_emb = torch.cat([z_s, z_t], dim=1)
+            return handle, new_emb
+        return None, embedding
+
+    def encode_v4(self, sketch_points, shape_points, is_training):
+        # only do VAE to z_t
+        inputs = torch.cat([sketch_points, shape_points])
+        embedding = self.encoder(inputs, is_training=is_training)
+        z_s = embedding[:, :self.config.decoder_input_embbeding_size].clone()
+        z_t = embedding[:, self.config.decoder_input_embbeding_size:].clone()
+        # z_t = self.convFeat(embedding)
+        # embedding[:, :self.config.decoder_input_embbeding_size] = z_s_new
+        z_t, mu, log_var = self.vae_net(z_t)
+        new_emb = torch.cat([z_s, z_t], dim=1)
+        return [mu, log_var], new_emb
+
+    def forward(self, sketch_points, shape_points, coordinates_inputs, is_training):
+        embedding = getattr(self, self.encode_func)(sketch_points, shape_points, is_training=is_training)
+        coordinates_inputs = coordinates_inputs.repeat(2,1,1)
+        results = self.decoder(embedding, coordinates_inputs)
+        # del coordinates_inputs
+        # prediction = getattr(self, self.config.forward_name)(sketch_points, shape_points, coordinates_inputs, is_training)
+        return results
+
+    def forward_v1(self, sketch_points, shape_points, coordinates_inputs, is_training):
+        inputs = torch.cat([sketch_points, shape_points])
+        embedding = self.encoder(inputs, is_training)
+        if self.config.handle_network == 'Eigen':
+            z_s = embedding[:, :self.config.decoder_input_embbeding_size].clone()
+            z_s = self.eigen_net(z_s)
+            embedding[:, :self.config.decoder_input_embbeding_size] = z_s
+        coordinates_inputs = coordinates_inputs.repeat(2,1,1)
+        results = self.decoder(embedding, coordinates_inputs)
+        return results
+
+    def forward_v2(self, sketch_points, shape_points, coordinates_inputs):
+        # sketch_emb = [shape_z_s, sketch_z_t]
+        inputs = torch.cat([sketch_points, shape_points])
+        embedding = self.encoder(inputs)
+        sketch_num, shape_num = sketch_points.shape[0], shape_points.shape[0]
+        sketch_z, shape_z = torch.split(embedding, [sketch_num, shape_num])
+        shape_z_s = shape_z[:, :self.config.decoder_input_embbeding_size].clone()
+        if self.config.handle_network == 'Eigen':
+            shape_z_s = self.eigen_net(shape_z_s)
+            shape_z[:, :self.config.decoder_input_embbeding_size] = shape_z_s
+        sketch_z[:, :self.config.decoder_input_embbeding_size] = shape_z_s[:sketch_num]
+        embedding = torch.cat([sketch_z, shape_z])
+        coordinates_inputs = coordinates_inputs.repeat(2,1,1)
+        results = self.decoder(embedding, coordinates_inputs)
+        return results
+
+
+
+    def orthogonal_regularizer(self):
+        reg = []
+        for layer in self.modules():
+            if isinstance(layer, SubspaceLayer):
+                UUT = layer.U @ layer.U.t()
+                reg.append(
+                    ((UUT - torch.eye(UUT.shape[0], device=UUT.device)) ** 2).mean()
+                )
+        return sum(reg) / len(reg)
+
+    def cov_loss(self, coef):
+        B, N_basis = coef.shape
+        coef = coef - coef.mean(dim=0)
+        cov = torch.bmm(coef.view(B, N_basis, 1),
+                        coef.view(B, 1, N_basis))
+        cov = cov.sum(dim=0) / (B - 1)
+        cov_loss = cov.norm(p=1, dim=(0, 1))
+        return cov_loss
+
+    def sp_loss(self, coef):
+        B, N_basis = coef.shape
+
+        reg = [coef.view(B, N_basis).norm(p=1, dim=-1).mean()]
+        for layer in self.modules():
+            if isinstance(layer, SubspaceLayer):
+                reg.append(layer.U.view(N_basis, self.config.decoder_input_embbeding_size).norm(p=1, dim=-1).mean())
+        return sum(reg) / len(reg)
 
 
 

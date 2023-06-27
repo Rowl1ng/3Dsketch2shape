@@ -4,7 +4,7 @@ import torch
 import importlib
 import os
 from models.network import AutoEncoder, ImageAutoEncoder
-from data.data import ImNetImageSamples
+from data.datasets import ImNetImageSamples
 from utils.debugger import MyDebugger
 from torch.multiprocessing import Pool, Process, set_start_method
 
@@ -61,8 +61,9 @@ def split(a, n):
 
 if __name__ == '__main__':
 
+    root_dir = '/vol/vssp/datasets/multiview/SDF_ShapeNet/'
     ## folder for testing
-    testing_folder = r'./pretrain/image_encoder'
+    testing_folder = root_dir + 'NT-Net/image_encoder'
     config_path = os.path.join(testing_folder, 'config.py')
 
     ## import config here
@@ -72,7 +73,7 @@ if __name__ == '__main__':
 
     ## dataload
     ### create dataset
-    data_path = r'./data/all_vox256_img/all_vox256_img_test.hdf5'
+    data_path = root_dir + 'BP-Net/data/all_vox256_img/all_vox256_img_test.hdf5'
 
     testing_flag = True
     if os.path.exists(config.data_path) and not testing_flag:

@@ -3,17 +3,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
-from models.network import AutoEncoder, ImageAutoEncoder
+from models.network import AutoEncoder, SketchAutoEncoder
 from train.implicit_trainer import Trainer
-from data.datasets import ImNetImageSamples
+from data.datasets import SketchSamples
 from torch.utils.data import DataLoader
 from utils.debugger import MyDebugger
 import os
 import argparse
+import utils.provider as provider
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-class ImageTrainer(object):
+class SketchTrainer(object):
 
     def __init__(self, config, debugger, auto_encoder_cofig):
         self.debugger = debugger
@@ -36,17 +37,17 @@ class ImageTrainer(object):
         self.config.auto_encoder_resume_path = None
 
         ### create dataset
-        train_samples = ImNetImageSamples(data_path=self.config.data_path,
+        train_samples = SketchSamples(data_path=self.config.train_data_path,
                                           auto_encoder = auto_encoder)
 
         train_data_loader = DataLoader(dataset=train_samples,
                                        batch_size=self.config.batch_size,
                                        num_workers=self.config.data_worker,
                                        shuffle=True,
-                                       drop_last=False)
+                                       drop_last=True)
 
         if hasattr(self.config, 'use_testing') and self.config.use_testing:
-            test_samples = ImNetImageSamples(data_path=self.config.data_path[:-10] + 'test.hdf5',
+            test_samples = SketchSamples(data_path=self.config.test_data_path,
                                         auto_encoder=auto_encoder)
             test_data_loader = DataLoader(dataset=test_samples,
                                           batch_size=self.config.batch_size,
@@ -55,7 +56,7 @@ class ImageTrainer(object):
                                           drop_last=False)
 
         ### set up network
-        network = ImageAutoEncoder(config = self.config)
+        network = SketchAutoEncoder(config = self.config)
         network.set_autoencoder(auto_encoder)
         if torch.cuda.is_available() and torch.cuda.device_count() > 1:
             print(f"Use {torch.cuda.device_count()} GPUS!")
@@ -75,10 +76,10 @@ class ImageTrainer(object):
             self.config.network_resume_path = None
 
         if torch.cuda.device_count() > 1:
-            optimizer = torch.optim.Adam(params=network.module.image_encoder.parameters(), lr=self.config.lr,
+            optimizer = torch.optim.Adam(params=network.module.sketch_encoder.parameters(), lr=self.config.lr,
                                          betas=(self.config.beta1, 0.999))
         else:
-            optimizer = torch.optim.Adam(params=network.image_encoder.parameters(), lr=self.config.lr,
+            optimizer = torch.optim.Adam(params=network.sketch_encoder.parameters(), lr=self.config.lr,
                                          betas=(self.config.beta1, 0.999))
 
         if self.config.optimizer_resume_path is not None:
@@ -121,17 +122,24 @@ class ImageTrainer(object):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         ###
-        for (input_images, latent_vector_gt), samples_indices in tepoch:
-            input_images, latent_vector_gt = input_images.to(device), latent_vector_gt.to(device)
+        for (points, latent_vector_gt), samples_indices in tepoch:
+            
+            points = provider.random_point_dropout(points.numpy())
+            points[:, :, 0:3] = provider.random_scale_point_cloud(points[:, :, 0:3])
+            points[:, :, 0:3] = provider.shift_point_cloud(points[:, :, 0:3])
+            points = torch.Tensor(points)
+            points = points.transpose(2, 1)
+
+            points, latent_vector_gt = points.to(device), latent_vector_gt.to(device)
 
             if is_training:
                 optimizer.zero_grad()
 
             ##
             if torch.cuda.device_count() > 1:
-                pred_latent_vector = network.module.image_encoder(input_images)
+                pred_latent_vector = network.module.sketch_encoder(points, is_training=is_training)
             else:
-                pred_latent_vector = network.image_encoder(input_images)
+                pred_latent_vector = network.sketch_encoder(points, is_training=is_training)
 
             ## output results
             loss = loss_fn(pred_latent_vector, latent_vector_gt)
@@ -187,6 +195,9 @@ if __name__ == '__main__':
 
 
     model_type = f"AutoEncoder-{config.encoder_type}-{config.decoder_type}" if config.network_type == 'AutoEncoder' else f"AutoDecoder-{config.decoder_type}"
-    debugger = MyDebugger(f'Image-Training-experiment-{os.path.basename(config.data_folder)}-{model_type}{config.special_symbol}', is_save_print_to_file = True, config_path = resume_path)
-    trainer = ImageTrainer(config = config, debugger = debugger, auto_encoder_cofig = auto_config)
+    debugger = MyDebugger(f'Sketch-Training-experiment-{os.path.basename(config.data_folder)}-{model_type}{config.special_symbol}', \
+        is_save_print_to_file = True, \
+        config_path = resume_path, \
+        debug_dir=config.debug_base_folder)
+    trainer = SketchTrainer(config = config, debugger = debugger, auto_encoder_cofig = auto_config)
     trainer.train_network()

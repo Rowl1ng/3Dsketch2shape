@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 from models.network import AutoEncoder
-from data.data import ImNetSamples
+from data.datasets import ImNetSamples
 from torch.utils.data import DataLoader
 from utils.debugger import MyDebugger
 import os

@@ -71,5 +71,5 @@ special_symbol = ''
 half_batch_size_when_phase_2 = False
 use_testing = False
 testing_interval = 1
-auto_encoder_config_path = None
-auto_encoder_resume_path = None
+auto_encoder_config_path = r'./pretrain/phase_2_model/config.py'
+auto_encoder_resume_path = r'./pretrain/phase_2_model/model_epoch_2_300.pth'

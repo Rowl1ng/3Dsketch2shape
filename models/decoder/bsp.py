@@ -36,7 +36,7 @@ class BSPDecoder(torch.nn.Module):
         ones = torch.ones(x.size(0), x.size(1), 1).to(device)
         x = torch.cat((x, ones), dim = 2)
         if not hasattr(self.config, 'bsp_phase') or self.config.bsp_phase == 0:
-            ## phase 0
+            ## phase 0PlaneEncoder
             h1 = torch.matmul(x, plane_m)
             h1 = torch.clamp(h1, min=0)
 

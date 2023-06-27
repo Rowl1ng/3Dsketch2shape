@@ -121,7 +121,7 @@ class DGCNN(nn.Module):
         self.linear2 = nn.Linear(512, 256)
         self.bn7 = nn.BatchNorm1d(256)
         self.dp2 = nn.Dropout(p=config.dropout)
-        self.linear3 = nn.Linear(256, config.output_channels)
+        self.linear3 = nn.Linear(256, config.CodeLength)
 
     def forward(self, x):
         batch_size = x.size(0)
