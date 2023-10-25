@@ -133,17 +133,17 @@ class SDFSamples(torch.utils.data.Dataset):
 
         self.subsample = subsample
 
-        name_list_path = os.path.join(DATA_DIR, 'split', list_file.format(split))
+        name_list_path = os.path.join(DATA_DIR, 'datasets/split', list_file.format(split))
         self.name_list = [line.rstrip() for line in open(name_list_path)]
         if debug:
             self.name_list = self.name_list[:200]
         # self.npyfiles = get_instance_filenames(self.name_list)
 
         # PC data
-        name_list_path = os.path.join(DATA_DIR, 'split/all.txt')
+        name_list_path = os.path.join(DATA_DIR, 'datasets/split/all.txt')
         self.all_pc_names = [line.rstrip() for line in open(name_list_path)]
 
-        self.shape_pcs = np.load(os.path.join(DATA_DIR, 'datasets/shape/shape_pc_4096.npy'))
+        self.shape_pcs = np.load(os.path.join(DATA_DIR, 'datasets/pc/shape_pc_4096.npy'))
         # 'voxel':
         # import h5py
         # shape_data_path = os.path.join(DATA_DIR, 'datasets/all_vox256_img/chair_vox256.hdf5')
@@ -157,35 +157,35 @@ class SDFSamples(torch.utils.data.Dataset):
 
         print(
             "using "
-            + str(len(self.npyfiles))
+            + str(len(self.name_list))
             + " shapes "
         )
 
-        self.load_ram = load_ram
+        # self.load_ram = load_ram
 
-        if load_ram:
-            self.loaded_data = []
-            for f in self.npyfiles:
-                filename = os.path.join(SDF_DATA_DIR, f)
-                npz = np.load(filename)
-                pos_tensor = remove_nans(torch.from_numpy(npz["pos"]))
-                neg_tensor = remove_nans(torch.from_numpy(npz["neg"]))
-                self.loaded_data.append(
-                    [
-                        pos_tensor[torch.randperm(pos_tensor.shape[0])],
-                        neg_tensor[torch.randperm(neg_tensor.shape[0])],
-                    ]
-                )
+        # if load_ram:
+        #     self.loaded_data = []
+        #     for f in self.npyfiles:
+        #         filename = os.path.join(SDF_DATA_DIR, f)
+        #         npz = np.load(filename)
+        #         pos_tensor = remove_nans(torch.from_numpy(npz["pos"]))
+        #         neg_tensor = remove_nans(torch.from_numpy(npz["neg"]))
+        #         self.loaded_data.append(
+        #             [
+        #                 pos_tensor[torch.randperm(pos_tensor.shape[0])],
+        #                 neg_tensor[torch.randperm(neg_tensor.shape[0])],
+        #             ]
+        #         )
 
     def __len__(self):
-        return len(self.npyfiles)
+        return len(self.name_list)
 
     def __getitem__(self, idx):
         # sdf_path = self.npyfiles[idx]
         filename = self.name_list[idx]
         shape_index = self.all_pc_names.index(filename)
         shape_pc = self.shape_pcs[shape_index]
-        shape_index = self.all_voxel_names.index(filename)
+        # shape_index = self.all_voxel_names.index(filename)
         # shape_voxel = self.shape_voxels[shape_index]
         # if self.load_ram:
         #     return (
@@ -209,19 +209,19 @@ class Sketch_SDFSamples(torch.utils.data.Dataset):
         self.split = split
         self.subsample = subsample
         self.sample_extra = sample_extra
-        name_list_path = os.path.join(DATA_DIR, f'split/sdf_{split}_sketch.txt')
+        name_list_path = os.path.join(DATA_DIR, f'datasets/split/sdf_{split}_sketch.txt')
         self.name_list = [line.rstrip() for line in open(name_list_path)]
         if debug:
             self.name_list = self.name_list[:202]
 
-        name_list_path = os.path.join(DATA_DIR, f'split/sdf_{split}.txt')
+        name_list_path = os.path.join(DATA_DIR, f'datasets/split/sdf_{split}.txt')
         self.sdf_name_list = [line.rstrip() for line in open(name_list_path)]
 
         self.npyfiles = get_instance_filenames(self.sdf_name_list)
-        name_list_path = os.path.join(DATA_DIR, 'split/all.txt')
+        name_list_path = os.path.join(DATA_DIR, 'datasets/split/all.txt')
         self.all_pc_names = [line.rstrip() for line in open(name_list_path)]
-        self.shape_pc = np.load(os.path.join(DATA_DIR, 'datasets/shape/shape_pc_4096.npy')).astype('float32')
-        self.sketch_pc = np.load(os.path.join(DATA_DIR, f'datasets/sketch/sketch_pc_4096_{split}.npy')).astype('float32')
+        self.shape_pc = np.load(os.path.join(DATA_DIR, 'datasets/pc/shape_pc_4096.npy')).astype('float32')
+        self.sketch_pc = np.load(os.path.join(DATA_DIR, f'datasets/pc/sketch_pc_4096_{split}.npy')).astype('float32')
 
         self.extra_shape_list = [item for item in self.sdf_name_list if item not in self.name_list]
         print(
@@ -264,7 +264,7 @@ class Sketch_SDFSamples(torch.utils.data.Dataset):
         filenames = [os.path.join(SDF_DATA_DIR, instance_name + ".npz") for instance_name in sdf_list]
 
         # get convex hull SDF points
-        hull_point = np.load(os.path.join(DATA_DIR, 'datasets/sketch_SDF', instance_name +'.npy')).astype('float32')
+        # hull_point = np.load(os.path.join(DATA_DIR, 'datasets/sketch_SDF', instance_name +'.npy')).astype('float32')
         pc_data = np.concatenate((np.expand_dims(sketch_pc, axis=0), shape_pc), axis=0)
         if self.load_ram:
             return (
@@ -273,7 +273,7 @@ class Sketch_SDFSamples(torch.utils.data.Dataset):
             )
         else:
             sdfs = [unpack_sdf_samples(filename, self.subsample) for filename in filenames]
-            return pc_data, torch.stack(sdfs, 0), idx, np.array([self.sdf_name_list.index(instance_name) for instance_name in shape_list]), hull_point
+            return pc_data, torch.stack(sdfs, 0), idx, np.array([self.sdf_name_list.index(instance_name) for instance_name in shape_list]) #, hull_point
 
 
 class SketchSDF(torch.utils.data.Dataset):

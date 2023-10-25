@@ -140,6 +140,7 @@ dmypy.json
 
 *.submit_file
 *.sh
+*.txt
 
 /wandb
 /testing

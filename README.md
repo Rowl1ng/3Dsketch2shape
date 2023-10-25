@@ -9,7 +9,9 @@ To encourage the fidelity of the generated 3D models to an input sketch, we prop
 
 <!-- [![3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min](https://res.cloudinary.com/marcomontalbano/image/upload/v1698258224/video_to_markdown/images/youtube--PCig106t7aM-c05b58ac6eb4c4700831b2b3070cd403.jpg )](https://youtu.be/PCig106t7aM?si=h3bqDQAJqdbkBqE1&t=13  "3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min" ) -->
 
+
 [<img src="https://res.cloudinary.com/marcomontalbano/image/upload/v1698258224/video_to_markdown/images/youtube--PCig106t7aM-c05b58ac6eb4c4700831b2b3070cd403.jpg" width="60%">](https://youtu.be/PCig106t7aM?si=h3bqDQAJqdbkBqE1&t=13 "3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min")
+
 
 # Results
 
@@ -35,7 +37,7 @@ Interpolation between multiple generation results:
 We provide the pre-trained models and datasets used in the paper for reproducing the results. You can unzip the file ([link](https://drive.google.com/drive/folders/10eYUtsZcCGSjj2H51EldFI5umXUmvUw0?usp=sharing)) in the ```3DSketch2Shape_data``` folder.
 
 - ```models```:
-  - ```stage1_decoder``: training DeepSDF in an auto-decoder way.
+  - ```stage1_decoder```: training DeepSDF in an auto-decoder way.
     - ```latent_code.pth```: Ground truth codes for each shape obtained from SDF decoder.
     - ```decoder_latest.pth```: SDF decoder checkpoint
     - ```encoder_latest.pth```: Point Cloud encoder checkpoint for shapes
@@ -44,7 +46,7 @@ We provide the pre-trained models and datasets used in the paper for reproducing
 - ```datasets```:
   - ```splits```: The dataset division used for the experiments.
   - ```pc```: 
-    - ```sketch_pc_4096_test/train.npy```: the 3D sketch point cloud that aligned with SDF files. You can access the original VR sketch dataset here: [https://cvssp.org/data/VRChairSketch/](https://cvssp.org/data/VRChairSketch/). 
+    - ```sketch_pc_4096_{test,train}.npy```: the 3D sketch point cloud that aligned with SDF files. You can access the original VR sketch dataset here: [https://cvssp.org/data/VRChairSketch/](https://cvssp.org/data/VRChairSketch/). 
     - ```shape_pc_4096.npy```: shape point cloud. The collection of 6,576 chair shapes is sourced from ShapeNetCore v2.
   - ```sdf```: The SDF data for chair shapes can be obtained from [https://github.com/Yueeey/sketcch3D](https://github.com/Yueeey/sketcch3D). Please download the ```XXX.npz``` files to your path and revise the ```SDF_DATA_DIR``` in ```.env``` file as your path correspondingly.
 
@@ -52,13 +54,23 @@ We provide the pre-trained models and datasets used in the paper for reproducing
 
 # Note
 
-you need to set all variables in  ```.env``` before running any commands below.
+You need to set all variables in  ```.env``` before running any commands below.
 
+```
+DATA_DIR: The directory path for the data including datasets and models. You can set it to the ```3DSketch2Shape_data``` path where you downloaded the data.
+EXP_DIR: The directory where all experimental files are stored, including checkpoints, generated results, etc.
+```
 # Training
 
 First train the autoencoder, then load the pretrained AE into stage 2 generation model.
 
-## Stage 1: SDF Autoencoder
+## Stage 1: SDF decoder
+
+Train DeepSDF in auto-decoder manner to obtain the ground truth latent code for shapes.
+
+This part of the code is still being organized.
+
+## Stage 1: Autoencoder
 
 ```shell
 python flow_sdf_trainer.py --resume_path configs/stage1_AE.py
@@ -73,8 +85,15 @@ python flow_sdf_trainer.py --resume_path configs/stage2_GenNF.py
 # Testing/Inference
 
 ```shell
-python flow_sdf_trainer.py --mode inference
+python flow_sdf_trainer.py --mode inference --resume_path configs/stage2_GenNF.py 
+--resume_epoch 300
+--num_gen 7 # 1(reconstruction result from shape) + 1(reconstruction result from sketch) + 5(the number of generated shapes conditioned on the sketch input)
 ```
+
+# Rendering Results
+
+Coming soon!
+
 
 ### Citation
 

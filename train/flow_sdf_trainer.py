@@ -83,14 +83,14 @@ class Trainer(object):
         self.decoder = nn.DataParallel(decoder)
         DATA_DIR = os.getenv('DATA_DIR')
         if not hasattr(self.config, 'encoder_from_scratch'):
-            encoder_path = os.path.join(DATA_DIR, 'datasets/shape/encoder_latest.pth')
+            encoder_path = os.path.join(DATA_DIR, 'models/stage1_decoder/encoder_latest.pth')
             checkpoint = torch.load(encoder_path, map_location=device)
             self.encoder.load_state_dict(checkpoint['model_state_dict'])
 
-        sdf_decoder_path = os.path.join(DATA_DIR, 'datasets/shape/decoder_latest.pth')
+        sdf_decoder_path = os.path.join(DATA_DIR, 'models/stage1_decoder/decoder_latest.pth')
         checkpoint = torch.load(sdf_decoder_path, map_location=device)
         self.decoder.load_state_dict(checkpoint['model_state_dict'])
-        latent_code_path = os.path.join(DATA_DIR, 'datasets/shape/latent_code.pth')
+        latent_code_path = os.path.join(DATA_DIR, 'models/stage1_decoder/latent_code.pth')
         self.gt_emb = torch.load(latent_code_path, map_location=device)['latent_codes']['weight']
         from data.SDF_datasets import SDFSamples
         self.train_shape_samples = SDFSamples('train', self.SamplesPerScene, load_ram=False, list_file='sdf_{}.txt', debug=self.debug)
@@ -222,20 +222,20 @@ class Trainer(object):
                     #     selected = [134, 196, 34, 163, 187]# np.random.choice(len(trainer.train_samples), args.num_samples, replace=False)
                     #     self.inference(epoch=epoch, samples=self.test_samples, selected=selected, split='test', num_samples=5)
 
-    def get_sketch_SDF_loss(self, sketch_points, sketch_emb, hull_point):
+    def get_sketch_SDF_loss(self, sketch_points, sketch_emb):
         # b.feed points to decoder 
         point_num = sketch_points.shape[1]
         batch_vecs = torch.repeat_interleave(sketch_emb, point_num, dim = 0)
         sketch_sdf_values = self.decoder(batch_vecs, sketch_points.reshape(-1, 3))
         # c.compute SDF L1 loss at sketch points
         loss_sketch_sdf = self.loss_l1(sketch_sdf_values, torch.zeros_like(sketch_sdf_values)) 
-        if hasattr(self.config, 'hull_point') and self.config.hull_point:
-            hull_sdf_values = self.decoder(batch_vecs, hull_point[:, :, :3].reshape(-1, 3))
-            if hasattr(self.config, 'hull_point_max'):
-                hull_sdf_loss = F.relu(self.config.hull_point_max - hull_sdf_values)
-            else:
-                hull_sdf_loss = F.relu(hull_point[:, :, -1].reshape(-1, 1) - hull_sdf_values)
-            loss_sketch_sdf += hull_sdf_loss.mean()
+        # if hasattr(self.config, 'hull_point') and self.config.hull_point:
+        #     hull_sdf_values = self.decoder(batch_vecs, hull_point[:, :, :3].reshape(-1, 3))
+        #     if hasattr(self.config, 'hull_point_max'):
+        #         hull_sdf_loss = F.relu(self.config.hull_point_max - hull_sdf_values)
+        #     else:
+        #         hull_sdf_loss = F.relu(hull_point[:, :, -1].reshape(-1, 1) - hull_sdf_values)
+        #     loss_sketch_sdf += hull_sdf_loss.mean()
 
         return loss_sketch_sdf
 
@@ -485,7 +485,7 @@ class Trainer(object):
         loss_list = ["L1_loss", "NCE_loss", "Triplet_loss", "Contrastive_loss", "prob_loss","sketch_sdf_loss","shape_sdf_loss","latent_loss","sample_sketch_sdf_loss","sample_emb_div", "sample_emb_rec"]
         loss_dict = {name: [] for name in loss_list}
 
-        for pc_data, sdf_data, indices, all_shape_index, hull_point in data_loader:
+        for pc_data, sdf_data, indices, all_shape_index in data_loader:
             pc_data = rearrange(pc_data, 'b h w c -> (b h) w c')
             if pc_data.shape[1] != self.config.num_points:
                 points = sample_farthest_points(pc_data.transpose(1, 2), self.config.num_points).to(device)
@@ -494,7 +494,7 @@ class Trainer(object):
 
             sdf_data = rearrange(sdf_data, 'b h w c -> (b h) w c')[sdf_index]
             all_shape_index = all_shape_index.reshape(-1)
-            hull_point = hull_point.to(device)
+            # hull_point = hull_point.to(device)
 
             #################################### AE+NF stage ###################################
 
@@ -587,7 +587,7 @@ class Trainer(object):
                 # 1.SDF Loss for sampled shapes
                 # a.sample points from sketch. then normalize sketch_points to align with shape SDF points scale
                 sketch_points = points[sketch_index].transpose(2, 1)
-                loss_sketch_sdf = self.get_sketch_SDF_loss(sketch_points.repeat(self.config.num_samples, 1, 1), sampled_shape_embs, hull_point.repeat(self.config.num_samples, 1, 1))
+                loss_sketch_sdf = self.get_sketch_SDF_loss(sketch_points.repeat(self.config.num_samples, 1, 1), sampled_shape_embs)
                 loss += loss_sketch_sdf * (self.config.lambda_sketch_sdf_loss if hasattr(self.config, 'lambda_sketch_sdf_loss') else 1.0)
                 loss_dict["sample_sketch_sdf_loss"].append(loss_sketch_sdf.item())
 
@@ -1293,12 +1293,20 @@ if __name__ == '__main__':
     ## additional args for parsing
     import argparse
     optional_args = [("mode", str, "eval"),
-                    ("run_id", int, 0), ("resume_path", str, 'recon_L1+NCE+sketch_SDF_scale1.py'),  ("batch_size", int, 6),
-                    ("sample_extra", int, 2), ("saving_intervals", int, 5), 
-                    ("epoch", int, 20) ,("resume_epoch", int, 5), ("num_samples", int, 5),
-                    ("num_gen", int, 7) ,("margin", float, 0.3), #("eval_epoch_fun", str, 'eval_one_epoch_v3'), 
-                    ('lambda_latent_loss', float, 1.0), ('lambda_shape_sdf_loss', float, 1.),
-                    ('sigma_min', float, 0.), ('encoder_epoch', int, 0), ('num_basis', int, 4)
+                    # ("run_id", int, 0), 
+                    ("resume_path", str, 'configs/stage2_GenNF.py'), 
+                    ("batch_size", int, 6),
+                    ("sample_extra", int, 2), 
+                    ("saving_intervals", int, 5), 
+                    ("epoch", int, 20),
+                    ("resume_epoch", int, 5), 
+                    ("num_samples", int, 5),
+                    ("num_gen", int, 7), 
+                    ("margin", float, 0.3), 
+                    ('lambda_latent_loss', float, 1.0), 
+                    ('lambda_shape_sdf_loss', float, 1.),
+                    ('sigma_min', float, 0.), 
+                    ('encoder_epoch', int, 0)
                     ]
     parser = argparse.ArgumentParser()
     for optional_arg, arg_type, default in optional_args:
@@ -1307,7 +1315,6 @@ if __name__ == '__main__':
     parser.add_argument('--use_testing', default=True, action='store_true', help='whether to test on test set')
     parser.add_argument('--debug', default=False, action='store_true', help='whether to resume')
     parser.add_argument('--overwrite', default=False, action='store_true', help='whether to resume')
-
     parser.add_argument('--train_shape_encoder',choices=('True','False'), default='False')
     parser.add_argument('--unseen', default=False, action='store_true', help='whether to resume')
     parser.add_argument('--seen', default=False, action='store_true', help='whether to resume')
@@ -1333,10 +1340,11 @@ if __name__ == '__main__':
     if not hasattr(config, 'num_points') :
         config.num_points = 4096
 
-    if not hasattr(config, 'num_basis'):
-        config.num_basis = args.num_basis
+    # if not hasattr(config, 'num_basis'):
+    #     config.num_basis = args.num_basis
 
-    exp_name = os.path.basename(args.resume_path).split('.')[0] + f'_run{args.run_id}'
+    # exp_name = os.path.basename(args.resume_path).split('.')[0] + f'_run{args.run_id}'
+    exp_name = os.path.basename(args.resume_path).split('.')[0]
 
     if torch.cuda.is_available() and torch.cuda.device_count() > 1:
         args.batch_size = torch.cuda.device_count() * args.batch_size
@@ -1406,21 +1414,14 @@ if __name__ == '__main__':
     def eval_other(dataset):
         from data.SDF_datasets import sketch_samples
         samples = sketch_samples(split='test', dataset=dataset)
-        # selected = [28]
-        # selected = [*range(28, len(samples))]
         selected = [*range(len(samples))]
         trainer.inference(args.resume_epoch, samples, selected, 'test', num_samples = args.num_gen, overwrite=False, eval=True, to_mesh=True, save_embed=False, dataset=dataset)
         # trainer.evaluation(epoch=args.resume_epoch,  selected=selected, samples=samples,  split='test', num_samples=args.num_gen, vis=False, dataset=dataset)
 
     if args.mode == 'train':
         trainer.train_network(epochs=args.epoch, saving_intervals=args.saving_intervals, resume=args.resume_training, use_testing=args.use_testing)
-        # debug()
-        # inference()
+        inference()
         evaluation()
-        # vis()
-        # selected = [134, 196, 34, 163, 187]
-        # trainer.vis_sigma_variants(epoch=args.resume_epoch, samples=trainer.test_samples, selected=selected, split='test', id=0)
-
     elif args.mode=='debug':
         debug()
     elif args.mode == 'inference':
