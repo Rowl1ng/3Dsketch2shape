@@ -7,24 +7,32 @@ Recently, 2D sketches and text inputs were considered as conditional modalities 
 To guarantee the plausibility of generated 3D shapes we leverage the normalizing flow that models the distribution of the latent space of 3D shapes. 
 To encourage the fidelity of the generated 3D models to an input sketch, we propose a dedicated loss that we deploy at different stages of the training process. We plan to make our code publicly available.
 
-[![3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min](https://res.cloudinary.com/marcomontalbano/image/upload/v1698246014/video_to_markdown/images/youtube--PCig106t7aM-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://youtu.be/PCig106t7aM "3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min")
+<!-- [![3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min](https://res.cloudinary.com/marcomontalbano/image/upload/v1698258224/video_to_markdown/images/youtube--PCig106t7aM-c05b58ac6eb4c4700831b2b3070cd403.jpg )](https://youtu.be/PCig106t7aM?si=h3bqDQAJqdbkBqE1&t=13  "3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min" ) -->
+
+[<img src="https://res.cloudinary.com/marcomontalbano/image/upload/v1698258224/video_to_markdown/images/youtube--PCig106t7aM-c05b58ac6eb4c4700831b2b3070cd403.jpg" width="60%">](https://youtu.be/PCig106t7aM?si=h3bqDQAJqdbkBqE1&t=13 "3D VR Sketch Guided 3D Shape Prototyping and Exploration (ICCV 2023) 5 min")
 
 # Results
 
 Generation results:
 
-![](figures/29_0_360.gif)![](figures/95_0_360.gif)![](figures/98_0_360.gif)![](figures/99_0_360.gif)
+|1|2|3|4|
+|:-:|:-:|:-:|:-:|
+|![First Image](figures/29_0_360.gif)|![Second Image](figures/95_0_360.gif)|![Second Image](figures/98_0_360.gif)|![Second Image](figures/99_0_360.gif)|
+
+<!-- ![](figures/29_0_360.gif)![](figures/95_0_360.gif)![](figures/98_0_360.gif)![](figures/99_0_360.gif) -->
 
 Interpolation between multiple generation results:
 
-![](figures/interp_95.gif)![](figures/interp_98.gif)
+|2|3|
+|:-:|:-:|
+|![](figures/interp_95.gif)|![](figures/interp_98.gif)|
 
 
 # Environments
 
 # Dataset + Models
 
-We provide the pre-trained models and datasets used in the paper for reproducing the results. You can unzip the file ([link]()) in the ```3DSketch2Shape_data``` folder.
+We provide the pre-trained models and datasets used in the paper for reproducing the results. You can unzip the file ([link](https://drive.google.com/drive/folders/10eYUtsZcCGSjj2H51EldFI5umXUmvUw0?usp=sharing)) in the ```3DSketch2Shape_data``` folder.
 
 - ```models```:
   - ```stage1_decoder``: training DeepSDF in an auto-decoder way.
