@@ -56,13 +56,12 @@ We provide the pre-trained models and datasets used in the paper for reproducing
 
 You need to set all variables in  ```.env``` before running any commands below.
 
-```
-DATA_DIR: The directory path for the data including datasets and models. You can set it to the ```3DSketch2Shape_data``` path where you downloaded the data.
-EXP_DIR: The directory where all experimental files are stored, including checkpoints, generated results, etc.
-```
+- ```DATA_DIR```: The directory path for the data including datasets and models. You can set it to the ```3DSketch2Shape_data``` path where you downloaded the data.
+- ```EXP_DIR```: The directory where all experimental files are stored, including checkpoints, generated results, etc.
+
 # Training
 
-First train the autoencoder, then load the pretrained AE into stage 2 generation model.
+Begin by training the SDF decoder. Subsequently, train the sketch-to-shape autoencoder. Finally, load the pretrained autoencoder into the second stage generation model.
 
 ## Stage 1: SDF decoder
 
@@ -95,7 +94,7 @@ python flow_sdf_trainer.py --mode inference --resume_path configs/stage2_GenNF.p
 Coming soon!
 
 
-### Citation
+# Citation
 
 If you find our work useful in your research, please consider citing:
 ```
