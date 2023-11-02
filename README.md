@@ -78,7 +78,7 @@ python flow_sdf_trainer.py --resume_path configs/stage1_AE.py
 ## Stage 2: Generation model
 
 ```shell
-python flow_sdf_trainer.py --resume_path configs/stage2_GenNF.py
+python flow_sdf_trainer.py --mode train --resume_path configs/stage2_GenNF.py
 ```
 
 # Testing/Inference
