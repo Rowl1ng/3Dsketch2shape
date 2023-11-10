@@ -31,4 +31,4 @@ train_with_sigma_norm_loss = False
 # Triplet loss
 margin = 0.3
 
-eval_epoch_fun = 'eval_one_epoch_v3'
+eval_epoch_fun = 'eval_one_epoch_AE'

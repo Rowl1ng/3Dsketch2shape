@@ -273,193 +273,120 @@ class Trainer(object):
                 "train_emb_loss": np.mean(np.array(loss_emb_array))
                 }
 
-    # def eval_one_epoch_v3(self, epoch, data_loader, is_training=True):
-    #     if is_training:
-    #         self.sigma_layer.train()
-    #         self.latent_flow_network.train()
-    #         # train encoder with shape SDF loss
-    #         if hasattr(self.config, "freeze_encoder") and self.config.freeze_encoder:
-    #             self.encoder.eval()
-    #             for param in self.encoder.module.parameters():
-    #                 param.requires_grad = False
-    #         else:
-    #             self.encoder.train()
-    #         sketch_index = self.sketch_index
-    #         shape_index = self.shape_index
-    #         sdf_index = self.sdf_index
-    #     else:
-    #         self.sigma_layer.eval()
-    #         self.latent_flow_network.eval()
-    #         self.encoder.eval()
-    #         sketch_index = self.test_sketch_index
-    #         shape_index = self.test_shape_index
-    #         sdf_index = self.test_sdf_index
+    def eval_one_epoch_AE(self, epoch, data_loader, is_training=True):
+        if is_training:
+            self.sigma_layer.train()
+            self.latent_flow_network.train()
+            # train encoder with shape SDF loss
+            if hasattr(self.config, "freeze_encoder") and self.config.freeze_encoder:
+                self.encoder.eval()
+                for param in self.encoder.module.parameters():
+                    param.requires_grad = False
+            else:
+                self.encoder.train()
+            sketch_index = self.sketch_index
+            shape_index = self.shape_index
+            sdf_index = self.sdf_index
+        else:
+            self.sigma_layer.eval()
+            self.latent_flow_network.eval()
+            self.encoder.eval()
+            sketch_index = self.test_sketch_index
+            shape_index = self.test_shape_index
+            sdf_index = self.test_sdf_index
 
-    #     loss_list = ["L1_loss", "NCE_loss", "Triplet_loss", "Contrastive_loss", "prob_loss","sketch_sdf_loss","shape_sdf_loss","latent_loss","sample_sketch_sdf_loss","sigma_loss", "sketch2shape_sdf_loss"]
-    #     loss_dict = {name: [] for name in loss_list}
+        loss_list = ["L1_loss", "NCE_loss", "Triplet_loss", "Contrastive_loss", "prob_loss","sketch_sdf_loss","shape_sdf_loss","latent_loss","sample_sketch_sdf_loss","sigma_loss", "sketch2shape_sdf_loss"]
+        loss_dict = {name: [] for name in loss_list}
 
-    #     for pc_data, sdf_data, indices, all_shape_index, hull_point in data_loader:
-    #         pc_data = rearrange(pc_data, 'b h w c -> (b h) w c')
-    #         if pc_data.shape[1] != self.config.num_points:
-    #             points = sample_farthest_points(pc_data.transpose(1, 2), self.config.num_points).to(device)
-    #         else:
-    #             points = pc_data.transpose(2, 1).to(device)
+        for pc_data, sdf_data, indices, all_shape_index in data_loader:
+            pc_data = rearrange(pc_data, 'b h w c -> (b h) w c')
+            if pc_data.shape[1] != self.config.num_points:
+                points = sample_farthest_points(pc_data.transpose(1, 2), self.config.num_points).to(device)
+            else:
+                points = pc_data.transpose(2, 1).to(device)
 
-    #         sdf_data = rearrange(sdf_data, 'b h w c -> (b h) w c')[sdf_index]
-    #         all_shape_index = all_shape_index.reshape(-1)
+            sdf_data = rearrange(sdf_data, 'b h w c -> (b h) w c')[sdf_index]
+            all_shape_index = all_shape_index.reshape(-1)
             
 
-    #         #################################### AE+NF stage ###################################
+            #################################### AE+NF stage ###################################
 
-    #         loss = 0.0
+            loss = 0.0
 
-    #         if self.config.train_shape_encoder or not is_training:
-    #             train_feat = self.encoder(points)
-    #             sketch_emb = train_feat[sketch_index]
-    #             shape_emb = train_feat[shape_index]
-    #         else:
-    #             train_feat = torch.zeros([points.shape[0], self.config.CodeLength]).to(device)
-    #             sketch_emb = self.encoder(points[sketch_index])
-    #             # If don't train encoder for shape, then use latent code from DeepSDF decoder instead
-    #             shape_emb = self.gt_emb[all_shape_index][sdf_index]
-    #             train_feat[sketch_index] = sketch_emb
-    #             train_feat[shape_index] = shape_emb
+            if self.config.train_shape_encoder or not is_training:
+                train_feat = self.encoder(points)
+                sketch_emb = train_feat[sketch_index]
+                shape_emb = train_feat[shape_index]
+            else:
+                train_feat = torch.zeros([points.shape[0], self.config.CodeLength]).to(device)
+                sketch_emb = self.encoder(points[sketch_index])
+                # If don't train encoder for shape, then use latent code from DeepSDF decoder instead
+                shape_emb = self.gt_emb[all_shape_index][sdf_index]
+                train_feat[sketch_index] = sketch_emb
+                train_feat[shape_index] = shape_emb
 
-    #         if self.config.train_with_emb_loss is not None:
-    #             gt_batch_vecs = self.gt_emb[all_shape_index][sdf_index]
-    #             sketch_labels = torch.arange(0, sketch_emb.shape[0]).to(device)
-    #             shape_labels = torch.arange(0, shape_emb.shape[0]).to(device)
-    #             if 'L1' in self.config.train_with_emb_loss:
-    #                 # L1(e_f, e_g')
-    #                 l1_reg_loss = self.loss_l1_sum(sketch_emb, gt_batch_vecs[:sketch_emb.shape[0]])
-    #                 if self.config.train_shape_encoder:
-    #                 # L1(e_f, e_f')
-    #                     l1_reg_loss += self.loss_l1_sum(shape_emb, gt_batch_vecs)
-    #                     l1_reg_loss = l1_reg_loss/2
-    #                 loss += l1_reg_loss * (self.config.lambda_l1_loss if hasattr(self.config, 'lambda_l1_loss') else 1.0)
-    #                 loss_dict['L1_loss'].append(l1_reg_loss.item())
-    #             if 'NCE' in self.config.train_with_emb_loss:
-    #                 # L(e_f, e_g')
-    #                 nce_reg_loss = loss_NCE(sketch_emb, sketch_labels, gt_batch_vecs, 'sum')
-    #                 if self.config.train_shape_encoder:
-    #                     nce_reg_loss += loss_NCE(shape_emb, shape_labels, gt_batch_vecs, 'sum')
-    #                     nce_reg_loss = nce_reg_loss/2
-    #                 loss += nce_reg_loss * (self.config.lambda_NCE_loss if hasattr(self.config, 'lambda_NCE_loss') else 1.0)
-    #                 loss_dict['NCE_loss'].append(nce_reg_loss.item())
-    #             # if 'Contrastive' in self.config.train_with_emb_loss:
-    #             #     embeds = torch.cat([sketch_emb, gt_batch_vecs], dim=0)
-    #             #     labels = torch.cat([sketch_labels, shape_labels])
-    #             #     contra_loss = self.contrastive_loss(embeds, labels) 
-    #             #     if self.config.train_shape_encoder:
-    #             #         embeds = torch.cat([shape_emb, gt_batch_vecs], dim=0)
-    #             #         labels = torch.cat([shape_labels, shape_labels])
-    #             #         contra_loss += self.contrastive_loss(embeds, labels) 
-    #             #         contra_loss = contra_loss/2
-    #             #     loss += contra_loss
-    #             #     loss_dict['Contrastive_loss'].append(contra_loss.item())
-    #             if 'sketch_sdf' in self.config.train_with_emb_loss:
-    #                 sketch_points = points[sketch_index].transpose(2, 1)
-    #                 loss_sketch_sdf = self.get_sketch_SDF_loss(sketch_points, sketch_emb, hull_point)
-    #                 loss += loss_sketch_sdf
-    #                 loss_dict["sketch_sdf_loss"].append(loss_sketch_sdf.item())
-    #             if 'shape_sdf' in self.config.train_with_emb_loss:
-    #                 # 3. SDF loss for shape reconstruction for finetuning encoder
-    #                 xyz = sdf_data[:, :, 0:3].reshape(-1, 3).to(device)
-    #                 shape_batch_vecs = torch.repeat_interleave(shape_emb, self.SamplesPerScene, dim = 0)
-    #                 pred_sdf = self.decoder(shape_batch_vecs, xyz)
-    #                 pred_sdf = torch.clamp(pred_sdf, - self.ClampingDistance, self.ClampingDistance)
-    #                 sdf_gt = sdf_data[:, :, 3].reshape(-1, 1).to(device)
-    #                 sdf_gt = torch.clamp(sdf_gt, - self.ClampingDistance, self.ClampingDistance)
-    #                 loss_shape_sdf = self.loss_l1(pred_sdf, sdf_gt) # / sdf_gt.shape[0]
-    #                 if self.config.train_shape_encoder:
-    #                     loss += loss_shape_sdf * self.config.lambda_shape_sdf_loss
-    #                 loss_dict["shape_sdf_loss"].append(loss_shape_sdf.item())
-    #             if 'shape_sdf_sketch' in self.config.train_with_emb_loss:
-    #                 B = sketch_emb.shape[0]
-    #                 # 3. SDF loss for shape reconstruction for finetuning encoder
-    #                 xyz = sdf_data[:B, :, 0:3].reshape(-1, 3).to(device)
-    #                 sketch_batch_vecs = torch.repeat_interleave(sketch_emb, self.SamplesPerScene, dim = 0)
-    #                 pred_sdf = self.decoder(sketch_batch_vecs, xyz)
-    #                 pred_sdf = torch.clamp(pred_sdf, - self.ClampingDistance, self.ClampingDistance)
-    #                 sdf_gt = sdf_data[:B, :, 3].reshape(-1, 1).to(device)
-    #                 sdf_gt = torch.clamp(sdf_gt, - self.ClampingDistance, self.ClampingDistance)
-    #                 loss_shape_sdf = self.loss_l1(pred_sdf, sdf_gt) # / sdf_gt.shape[0]
-    #                 loss += loss_shape_sdf
-    #                 loss_dict["sketch2shape_sdf_loss"].append(loss_shape_sdf.item())
+            if self.config.train_with_emb_loss is not None:
+                gt_batch_vecs = self.gt_emb[all_shape_index][sdf_index]
+                sketch_labels = torch.arange(0, sketch_emb.shape[0]).to(device)
+                shape_labels = torch.arange(0, shape_emb.shape[0]).to(device)
+                if 'L1' in self.config.train_with_emb_loss:
+                    # L1(e_f, e_g')
+                    l1_reg_loss = self.loss_l1_sum(sketch_emb, gt_batch_vecs[:sketch_emb.shape[0]])
+                    if self.config.train_shape_encoder:
+                    # L1(e_f, e_f')
+                        l1_reg_loss += self.loss_l1_sum(shape_emb, gt_batch_vecs)
+                        l1_reg_loss = l1_reg_loss/2
+                    loss += l1_reg_loss * (self.config.lambda_l1_loss if hasattr(self.config, 'lambda_l1_loss') else 1.0)
+                    loss_dict['L1_loss'].append(l1_reg_loss.item())
+                if 'NCE' in self.config.train_with_emb_loss:
+                    # L(e_f, e_g')
+                    nce_reg_loss = loss_NCE(sketch_emb, sketch_labels, gt_batch_vecs, 'sum')
+                    if self.config.train_shape_encoder:
+                        nce_reg_loss += loss_NCE(shape_emb, shape_labels, gt_batch_vecs, 'sum')
+                        nce_reg_loss = nce_reg_loss/2
+                    loss += nce_reg_loss * (self.config.lambda_NCE_loss if hasattr(self.config, 'lambda_NCE_loss') else 1.0)
+                    loss_dict['NCE_loss'].append(nce_reg_loss.item())
+                if 'sketch_sdf' in self.config.train_with_emb_loss:
+                    sketch_points = points[sketch_index].transpose(2, 1)
+                    loss_sketch_sdf = self.get_sketch_SDF_loss(sketch_points, sketch_emb)
+                    loss += loss_sketch_sdf
+                    loss_dict["sketch_sdf_loss"].append(loss_sketch_sdf.item())
+                if 'shape_sdf' in self.config.train_with_emb_loss:
+                    # 3. SDF loss for shape reconstruction for finetuning encoder
+                    xyz = sdf_data[:, :, 0:3].reshape(-1, 3).to(device)
+                    shape_batch_vecs = torch.repeat_interleave(shape_emb, self.SamplesPerScene, dim = 0)
+                    pred_sdf = self.decoder(shape_batch_vecs, xyz)
+                    pred_sdf = torch.clamp(pred_sdf, - self.ClampingDistance, self.ClampingDistance)
+                    sdf_gt = sdf_data[:, :, 3].reshape(-1, 1).to(device)
+                    sdf_gt = torch.clamp(sdf_gt, - self.ClampingDistance, self.ClampingDistance)
+                    loss_shape_sdf = self.loss_l1(pred_sdf, sdf_gt) # / sdf_gt.shape[0]
+                    if self.config.train_shape_encoder:
+                        loss += loss_shape_sdf * self.config.lambda_shape_sdf_loss
+                    loss_dict["shape_sdf_loss"].append(loss_shape_sdf.item())
+                if 'shape_sdf_sketch' in self.config.train_with_emb_loss:
+                    B = sketch_emb.shape[0]
+                    # 3. SDF loss for shape reconstruction for finetuning encoder
+                    xyz = sdf_data[:B, :, 0:3].reshape(-1, 3).to(device)
+                    sketch_batch_vecs = torch.repeat_interleave(sketch_emb, self.SamplesPerScene, dim = 0)
+                    pred_sdf = self.decoder(sketch_batch_vecs, xyz)
+                    pred_sdf = torch.clamp(pred_sdf, - self.ClampingDistance, self.ClampingDistance)
+                    sdf_gt = sdf_data[:B, :, 3].reshape(-1, 1).to(device)
+                    sdf_gt = torch.clamp(sdf_gt, - self.ClampingDistance, self.ClampingDistance)
+                    loss_shape_sdf = self.loss_l1(pred_sdf, sdf_gt) # / sdf_gt.shape[0]
+                    loss += loss_shape_sdf
+                    loss_dict["sketch2shape_sdf_loss"].append(loss_shape_sdf.item())
 
-    #         if self.config.train_with_nf_loss:
-    #             # Feed feat vectors to normalzing flow and get latent code and loss
-    #             # TODO: why choose 0.1?
-    #             train_embs = train_feat + 0.1 * torch.randn(train_feat.size(0), self.config.CodeLength).to(device)
-    #             u, log_jacob = self.latent_flow_network(train_embs, None)
-    #             log_probs = (-0.5 * u.pow(2) - 0.5 * math.log(2 * math.pi + self.EPS)).sum(-1, keepdim=True)
-    #             loss_log_prob = - (log_probs + log_jacob).sum(-1, keepdim=True).mean() 
-    #             # loss += loss_log_prob
-    #             if is_training:
-    #                 self.flow_optimizer.zero_grad()
-    #                 loss_log_prob.backward(retain_graph=True)
-    #                 self.flow_optimizer.step()
+            if is_training and loss > 0:
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
-    #             loss_dict["prob_loss"].append(loss_log_prob.item())
-
-    #         if is_training and loss > 0:
-    #             self.optimizer.zero_grad()
-    #             loss.backward()
-    #             self.optimizer.step()
-
-    #         #################################### Sampling stage ###################################
-    #         # 1. inverse flow: latent code-> feat, sampled from sketch latent code's neighborhood(decided by std sigma) N(sketch_emb, sigma)
-    #         # new_train_feat = self.encoder(points)
-    #         # new_sketch_emb = new_train_feat[sketch_index]
-    #         # if not self.config.train_shape_encoder:
-    #         #     # use GT latent code of decoder instead
-    #         #     new_train_feat[shape_index] = self.gt_emb[all_shape_index][sdf_index]
-
-    #         # log_var = self.sigma_layer(new_sketch_emb)
-    #         # new_u, log_jacob = self.latent_flow_network(new_train_feat, None)
-    #         # new_sketch_latent = new_u[sketch_index]
-    #         # gt_shape_latent = new_u[self.shape_gt_index] if is_training else new_u[self.test_shape_index]
-    #         # std = torch.exp(0.5 * log_var)
-    #         # TODO: sample more shapes from N(sketch_emb, sigma)
-    #         # sampled_shape_latent = new_sketch_latent + torch.randn_like(std).to(device) * std
-    #         # loss = 0.0
-    #         # if self.config.train_with_sketch_sdf_loss:
-    #         #     # 2. sampled feat -> SDF
-    #         #     sampled_shape_embs = self.latent_flow_network.sample(noise=sampled_shape_latent, cond_inputs=None)
-    #         #     ##################################### Losses ###########################################
-    #         #     # 1.SDF Loss for sampled shapes
-    #         #     # a.sample points from sketch. then normalize sketch_points to align with shape SDF points scale
-    #         #     sketch_points = points[sketch_index].transpose(2, 1)
-    #         #     loss_sketch_sdf = self.get_sketch_SDF_loss(sketch_points.repeat(self.config.num_samples, 1, 1), sampled_shape_embs, hull_point.repeat(self.config.num_samples, 1, 1))
-    #         #     loss += loss_sketch_sdf
-    #         #     loss_dict["sample_sketch_sdf_loss"].append(loss_sketch_sdf.item())
-    #         # if self.config.train_with_latent_loss:
-    #         #     # 2.latent loss: d(shape_latent, sampled_shape_latent)
-    #         #     if hasattr(self.config, 'latent_loss') and self.config.latent_loss == 'contrastive':
-    #         #         embeds = torch.cat([gt_shape_latent, sampled_shape_latent], dim=0)
-    #         #         labels = torch.cat([indices, indices])
-    #         #         loss_latent = self.loss_latent_fn(embeds, labels) 
-    #         #     else:
-    #         #         loss_latent = self.loss_latent_fn(gt_shape_latent, sampled_shape_latent) 
-    #         #     loss += loss_latent * self.config.lambda_latent_loss # lambda_latent_loss = 0.1
-    #         #     loss_dict["latent_loss"].append(loss_latent.item())
-
-    #         # if hasattr(self.config, 'train_with_sigma_norm_loss') and self.config.train_with_sigma_norm_loss:
-    #         #     l2_size_loss = torch.mean(torch.norm(std, dim=1))
-    #         #     loss += F.relu(self.config.sigma_min - l2_size_loss) 
-    #         #     loss_dict["sigma_loss"].append(l2_size_loss.item())
-
-    #         # if is_training and (self.config.train_with_sketch_sdf_loss or self.config.train_with_latent_loss):
-    #         #     self.optimizer.zero_grad()
-    #         #     loss.backward()
-    #         #     self.optimizer.step()
-
-    #     loss_mean = {name: np.mean(np.asarray(loss_dict[name])) for name in loss_dict.keys() if len(loss_dict[name])>0}
+        loss_mean = {name: np.mean(np.asarray(loss_dict[name])) for name in loss_dict.keys() if len(loss_dict[name])>0}
         
-    #     print("[{}] Epoch {} ".format('train' if is_training else 'test', epoch) + ' | '.join(['{}: {:.4f}'.format(name, loss_mean[name]) for name in loss_mean.keys()])) 
-    #     return loss_mean
+        print("[{}] Epoch {} ".format('train' if is_training else 'test', epoch) + ' | '.join(['{}: {:.4f}'.format(name, loss_mean[name]) for name in loss_mean.keys()])) 
+        return loss_mean
 
-    def eval_one_epoch_v4(self, epoch, data_loader, is_training=True):
+    def eval_one_epoch_Flow(self, epoch, data_loader, is_training=True):
         # conditional NF
         if is_training:
             self.sigma_layer.train()
@@ -590,19 +517,6 @@ class Trainer(object):
                 loss_sketch_sdf = self.get_sketch_SDF_loss(sketch_points.repeat(self.config.num_samples, 1, 1), sampled_shape_embs)
                 loss += loss_sketch_sdf * (self.config.lambda_sketch_sdf_loss if hasattr(self.config, 'lambda_sketch_sdf_loss') else 1.0)
                 loss_dict["sample_sketch_sdf_loss"].append(loss_sketch_sdf.item())
-
-            # if hasattr(self.config, "train_with_sample_emb_loss") and self.config.train_with_sample_emb_loss is not None:
-            #     # 2.latent loss: d(shape_latent, sampled_shape_latent)
-            #     # p = self.config.NCE_p if hasattr(self.config, 'NCE_p') else 2
-            #     if 'diversity' in self.config.train_with_sample_emb_loss:
-            #         sample_labels = torch.arange(0, self.config.num_samples).to(device)
-            #         loss_latent = loss_NCE_adapted(sampled_shape_embs.view(B, self.config.num_samples, -1), sample_labels, new_train_feat[shape_index][:B])
-            #         loss += loss_latent * (self.config.lambda_sample_emb_loss if hasattr(self.config, 'lambda_sample_emb_loss') else 1)
-            #         loss_dict["sample_emb_div"].append(loss_latent.item())
-            #     if 'recon' in self.config.train_with_sample_emb_loss:
-            #         nce_reg_loss = loss_NCE(sampled_shape_embs, sketch_labels.repeat(self.config.num_samples), new_train_feat[shape_index])
-            #         loss += nce_reg_loss
-            #         loss_dict['sample_emb_rec'].append(nce_reg_loss.item())
 
             if is_training and loss > 0:
                 # Optimize NF by sketch sdf loss

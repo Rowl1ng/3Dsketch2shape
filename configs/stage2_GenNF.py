@@ -60,7 +60,7 @@ resume_ckpt = 'stage1_AE/model_epoch_300.pth'
 
 # Conditional NF
 conditional_NF = True
-eval_epoch_fun = 'eval_one_epoch_v4'
+eval_epoch_fun = 'eval_one_epoch_Flow'
 
 freeze_encoder = True
 num_samples = 8

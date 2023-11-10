@@ -48,7 +48,7 @@ We provide the pre-trained models and datasets used in the paper for reproducing
   - ```pc```: 
     - ```sketch_pc_4096_{test,train}.npy```: the 3D sketch point cloud that aligned with SDF files. You can access the original VR sketch dataset here: [https://cvssp.org/data/VRChairSketch/](https://cvssp.org/data/VRChairSketch/). 
     - ```shape_pc_4096.npy```: shape point cloud. The collection of 6,576 chair shapes is sourced from ShapeNetCore v2.
-  - ```sdf```: The SDF data for chair shapes can be obtained from [https://github.com/Yueeey/sketcch3D](https://github.com/Yueeey/sketcch3D). Please download the ```XXX.npz``` files to your path and revise the ```SDF_DATA_DIR``` in ```.env``` file as your path correspondingly.
+  - ```sdf```: The SDF data for chair shapes were obtained from [https://github.com/Yueeey/sketcch3D](https://github.com/Yueeey/sketcch3D) . Please download the ```XXX.npz``` files to your path and revise the ```SDF_DATA_DIR``` in ```.env``` file as your path correspondingly.
 
 
 
@@ -72,7 +72,7 @@ This part of the code is still being organized.
 ## Stage 1: Autoencoder
 
 ```shell
-python flow_sdf_trainer.py --resume_path configs/stage1_AE.py
+python flow_sdf_trainer.py --mode train --resume_path configs/stage1_AE.py
 ```
 
 ## Stage 2: Generation model
@@ -87,6 +87,13 @@ python flow_sdf_trainer.py --mode train --resume_path configs/stage2_GenNF.py
 python flow_sdf_trainer.py --mode inference --resume_path configs/stage2_GenNF.py 
 --resume_epoch 300
 --num_gen 7 # 1(reconstruction result from shape) + 1(reconstruction result from sketch) + 5(the number of generated shapes conditioned on the sketch input)
+```
+
+# Evaluation
+
+```shell
+python flow_sdf_trainer.py --mode eval --resume_path configs/stage2_GenNF.py 
+--resume_epoch 300
 ```
 
 # Rendering Results
