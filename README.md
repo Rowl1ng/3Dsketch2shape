@@ -32,6 +32,11 @@ Interpolation between multiple generation results:
 
 # Environments
 
+Please install the required Python environment by running:
+```
+pip install -r environment.yml
+```
+
 # Dataset + Models
 
 We provide the pre-trained models and datasets used in the paper for reproducing the results. You can unzip the file ([link](https://drive.google.com/drive/folders/10eYUtsZcCGSjj2H51EldFI5umXUmvUw0?usp=sharing)) in the ```3DSketch2Shape_data``` folder.
@@ -63,13 +68,17 @@ You need to set all variables in  ```.env``` before running any commands below.
 
 Begin by training the SDF decoder. Subsequently, train the sketch-to-shape autoencoder. Finally, load the pretrained autoencoder into the second stage generation model.
 
-## Stage 1: SDF decoder
+## Stage 1: Sketch to SDF Autoencoder
+
+### Step 1: Train SDF decoder (Optional)
 
 Train DeepSDF in auto-decoder manner to obtain the ground truth latent code for shapes.
 
-This part of the code is still being organized.
+You can skip this step and directly use the model provided in ```stage1_decoder```. If you want to train from scratch, please refer to https://github.com/pinakinathc/MeshSDF.
 
-## Stage 1: Autoencoder
+### Step 2: Train Autoencoder 
+
+You can skip this step and directly use the model provided in ```stage1_AE```. If you want to train from scratch, you can use the following command.
 
 ```shell
 python flow_sdf_trainer.py --mode train --resume_path configs/stage1_AE.py
@@ -96,10 +105,16 @@ python flow_sdf_trainer.py --mode eval --resume_path configs/stage2_GenNF.py
 --resume_epoch 300
 ```
 
-# Rendering Results
+# Rendering 
 
-Coming soon!
+Requirment: Blender
 
+Please modify ```data/run_render_img.py``` and ```data/render_chair.py``` according to your needs.
+```python
+def render(work_info):
+    model_path, save_dir, color_id = work_info
+    os.system('$YOUR_BLENDER_PATH$ --background --python data/render_chair.py -- %s %s %s' % (model_path, save_dir, color_id))
+```
 
 # Citation
 
@@ -114,5 +129,9 @@ If you find our work useful in your research, please consider citing:
 }
 
 ```
+
+# Contact
+
+If you have any questions about this project please feel free to open an issue or contact Ling Luo at ling.rowling.luo@gmail.com.
 
 

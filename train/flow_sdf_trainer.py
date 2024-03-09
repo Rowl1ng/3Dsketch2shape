@@ -1263,11 +1263,11 @@ if __name__ == '__main__':
     if torch.cuda.is_available() and torch.cuda.device_count() > 1:
         args.batch_size = torch.cuda.device_count() * args.batch_size
 
-    if hasattr(config, 'disentangle'):
-        from train.others.disentangled_flow_sdf_trainer import Disentangle_Trainer
-        trainer = Disentangle_Trainer(exp_name, config, debug=args.debug, batch_size=args.batch_size,  sample_extra=args.sample_extra)
-    else:
-        trainer = Trainer(exp_name, config, debug=args.debug, batch_size=args.batch_size,  sample_extra=args.sample_extra)
+    # if hasattr(config, 'disentangle'):
+    #     from train.others.disentangled_flow_sdf_trainer import Disentangle_Trainer
+    #     trainer = Disentangle_Trainer(exp_name, config, debug=args.debug, batch_size=args.batch_size,  sample_extra=args.sample_extra)
+    # else:
+    trainer = Trainer(exp_name, config, debug=args.debug, batch_size=args.batch_size,  sample_extra=args.sample_extra)
 
     def inference():
         if not hasattr(config, 'conditional_NF'):
@@ -1291,17 +1291,17 @@ if __name__ == '__main__':
     def evaluation():
         # name_list_path = os.path.join(DATA_DIR, f'split/sdf_{split}_sketch.txt')
         # sdf_name_list = [line.rstrip() for line in open(name_list_path)]
-        name_path = os.path.join(os.getenv('DATA_DIR'), 'split/test_5participants.txt')
-        set_names = [line.rstrip().split('_')[1] for line in open(name_path)]
-        unseen_list = [trainer.test_samples.name_list.index(name) for name in set_names]
+        # name_path = os.path.join(os.getenv('DATA_DIR'), 'split/test_5participants.txt')
+        # set_names = [line.rstrip().split('_')[1] for line in open(name_path)]
+        # unseen_list = [trainer.test_samples.name_list.index(name) for name in set_names]
         if args.debug:
             selected = [134, 196, 34, 163, 187]# np.random.choice(len(trainer.train_samples), args.num_samples, replace=False)
-        elif args.unseen:
-            # load unseen 5 participants id
-            selected = unseen_list
-        elif args.seen:
-            all = [*range(0, len(trainer.test_samples))]
-            selected = [index for index in all if index not in unseen_list]
+        # elif args.unseen:
+        #     # load unseen 5 participants id
+        #     selected = unseen_list
+        # elif args.seen:
+        #     all = [*range(0, len(trainer.test_samples))]
+        #     selected = [index for index in all if index not in unseen_list]
         else:
             selected = [*range(len(trainer.test_samples))]
         trainer.inference(epoch=args.resume_epoch, samples=trainer.test_samples, selected=selected, split='test', num_samples=args.num_gen, overwrite=args.overwrite, eval=True)
