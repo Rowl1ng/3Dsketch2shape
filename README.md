@@ -53,7 +53,7 @@ We provide the pre-trained models and datasets used in the paper for reproducing
   - ```pc```: 
     - ```sketch_pc_4096_{test,train}.npy```: the 3D sketch point cloud that aligned with SDF files. You can access the original VR sketch dataset here: [https://cvssp.org/data/VRChairSketch/](https://cvssp.org/data/VRChairSketch/). 
     - ```shape_pc_4096.npy```: shape point cloud. The collection of 6,576 chair shapes is sourced from ShapeNetCore v2.
-  - ```sdf```: The SDF data for chair shapes were obtained from [https://github.com/Yueeey/sketcch3D](https://github.com/Yueeey/sketcch3D) . ~~Please download the ```XXX.npz``` files to your path~~. If the dataset is unavailable, you can adapt the ```GenerateSDFNonEven.py``` under ```data``` directory to generate SDF data from ShapeNet objects. Once obtain the SDF data please revise the ```SDF_DATA_DIR``` in ```.env``` file as your path correspondingly.
+  - ```sdf```: The SDF data for chair shapes were obtained from [https://github.com/Yueeey/sketcch3D](https://github.com/Yueeey/sketcch3D). If the dataset is unavailable, you can download from [Baidu Netdisk](https://pan.baidu.com/s/1kwMeWLoN9hDMgM-XEmPMew?pwd=vuc). You can also generate SDF data from scratch by adapting the ```GenerateSDFNonEven.py``` under ```data``` directory to generate SDF data from ShapeNet objects. Once obtain the SDF data please revise the ```SDF_DATA_DIR``` in ```.env``` file as your path correspondingly.
 
 
 
